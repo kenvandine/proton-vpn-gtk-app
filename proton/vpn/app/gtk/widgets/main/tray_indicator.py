@@ -108,7 +108,12 @@ class TrayIndicator:
 
         if self._tray is None:
             self._tray = TrayIcon()
-            self._tray.setup()
+            try:
+                self._tray.setup()
+            except Exception as e:
+                raise TrayIndicatorNotSupported(
+                    f"Failed to set up system tray: {e}"
+                ) from e
 
         self.status_update(self._controller.current_connection_status)
         self._controller.register_connection_status_subscriber(self)
@@ -122,23 +127,28 @@ class TrayIndicator:
             logger.warning("Tray icon enabled on an unsupported Desktop Environment")
         else:
             gnome_extensions = self._gnome_shell_list_extensions()
-            ubuntu_extension = gnome_extensions.get(UBUNTU_INDICATOR_EXTENSION)
-            default_extension = gnome_extensions.get(DEFAULT_INDICATOR_EXTENSION)
-
-            # Since the extension is part of the system we don't care about the
-            # user_extension_disabled value.
-            enable_for_ubuntu = ubuntu_extension \
-                and ubuntu_extension.get("state") == ACTIVE_STATE
-
-            # For the rest we take user_extension_disabled into consideration
-            # since it's not installed by default on the system and is dependent
-            # on user intention.
-            enable_for_default = default_extension \
-                and not self._disabled_user_extension() \
-                and default_extension.get("state") == ACTIVE_STATE
-
-            if enable_for_ubuntu or enable_for_default:
+            if gnome_extensions is None:
+                # Cannot query extensions (e.g. AppArmor blocks D-Bus in strict
+                # snap confinement). Assume appindicator is available.
                 self._app_indicator_available = True
+            else:
+                ubuntu_extension = gnome_extensions.get(UBUNTU_INDICATOR_EXTENSION)
+                default_extension = gnome_extensions.get(DEFAULT_INDICATOR_EXTENSION)
+
+                # Since the extension is part of the system we don't care about the
+                # user_extension_disabled value.
+                enable_for_ubuntu = ubuntu_extension \
+                    and ubuntu_extension.get("state") == ACTIVE_STATE
+
+                # For the rest we take user_extension_disabled into consideration
+                # since it's not installed by default on the system and is dependent
+                # on user intention.
+                enable_for_default = default_extension \
+                    and not self._disabled_user_extension() \
+                    and default_extension.get("state") == ACTIVE_STATE
+
+                if enable_for_ubuntu or enable_for_default:
+                    self._app_indicator_available = True
 
         return self._app_indicator_available
 
